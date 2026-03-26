@@ -1,0 +1,68 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Splat",
+  "projectDescription": "An AI-powered CLI debugging tool that captures compile/runtime errors, analyzes contextual file relationships, and delivers instant, structured fix suggestions using the Groq LLM.",
+  "theme": "luma",
+  "primaryColor": "#f43c04",
+  "lightColor": "#fc9c7a",
+  "darkColor": "#f3f0e9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "How It Works",
+            "pages": [
+              "how-it-works/overview",
+              "how-it-works/error-parsing",
+              "how-it-works/relational-analysis",
+              "how-it-works/ai-debugging"
+            ]
+          },
+          {
+            "group": "Command Reference",
+            "pages": [
+              "commands/squash",
+              "commands/flags"
+            ]
+          },
+          {
+            "group": "Configuration & Troubleshooting",
+            "pages": [
+              "configuration",
+              "troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Groq-powered fast LLM inference for instant debug responses",
+    "Git-aware context gathering that respects .gitignore",
+    "Relational file analysis (-r flag) traversing Nth-degree import connections",
+    "Structured JSON debug output with error location, type, and fix suggestion",
+    "Interactive terminal output with option to apply suggested code fixes",
+    "Support for multiple languages and frameworks via framework detection"
+  ],
+  "publicApiSurface": [
+    "splat squash <entrypoint>",
+    "splat squash -r <entrypoint>",
+    "relational_error_parsing_function(entrypoint, flag)",
+    "parse_error_stack(error_info)",
+    "build_adjacency_list(files, project_root)",
+    "get_nth_related_files(start_files, graph)",
+    "run_mock_repopack(paths)",
+    "process(traceback_message, original_error_information, context)",
+    "terminalstep1(json_object)"
+  ]
+}

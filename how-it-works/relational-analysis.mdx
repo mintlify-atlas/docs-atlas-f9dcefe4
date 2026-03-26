@@ -1,0 +1,130 @@
+---
+title: "Relational Analysis"
+description: "How the -r flag builds a dependency graph to capture the full context behind an error."
+---
+
+By default, Splat only includes the files that appear directly in the error traceback. The `-r` flag activates relational analysis: Splat statically parses every file's import statements and builds a graph of which files depend on which, then walks that graph outward from the error files to collect all related source files.
+
+## Why It Matters
+
+Many errors are caused by a function or variable defined in a file that never appears in the traceback itself. Without the full import context, the LLM may miss the root cause. Relational analysis surfaces these hidden dependencies so the model has complete information.
+
+## The Three Steps
+
+<Steps>
+  <Step title="Seed the graph with error files">
+    The files returned by `parse_error_stack` serve as starting nodes. Each file in the list will have its imports traced.
+  </Step>
+  <Step title="Build the adjacency list">
+    `build_adjacency_list` walks every seed file (and recursively their imports) using Python's `ast` module to parse `import` and `from ... import` statements without executing any code:
+
+    ```python utils/utils.py
+    def build_adjacency_list(files: List[str], project_root: str) -> Dict[str, List[str]]:
+        adjacency_list = {}
+        processed_files = set()
+
+        def process_file(file: str):
+            if file in processed_files or not is_project_file(file, project_root):
+                return
+            processed_files.add(file)
+            imports = set()
+
+            with open(file, 'r') as f:
+                content = f.read()
+            try:
+                tree = ast.parse(content)  # static parse — no code execution
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        imports.update(alias.name for alias in node.names)
+                    elif isinstance(node, ast.ImportFrom) and node.module:
+                        imports.add(node.module)
+            except SyntaxError:
+                pass
+            # resolve import names to file paths and recurse
+            ...
+
+        for file in files:
+            process_file(file)
+        return adjacency_list
+    ```
+
+    Import names are resolved to file paths by checking two candidate locations: the directory of the importing file and the project root. Only paths that exist on disk are added to the graph. The function recurses into each discovered file, so a file imported by an imported file is also included.
+  </Step>
+  <Step title="Traverse to Nth degree">
+    `get_nth_related_files` performs a breadth-first traversal from the seed files through the adjacency list, collecting every reachable file regardless of depth:
+
+    ```python utils/utils.py
+    def get_nth_related_files(
+        start_files: List[str],
+        graph: Dict[str, List[str]]
+    ) -> Set[str]:
+        related_files = set(start_files)
+        planned_visit = list(start_files)
+        possible_files = set()
+
+        while planned_visit:
+            current = planned_visit.pop(0)
+            possible_files.add(current)
+            for neighbor in graph.get(current, []):
+                if neighbor not in related_files:
+                    related_files.add(neighbor)
+                    planned_visit.append(neighbor)
+
+        return possible_files
+    ```
+
+    The loop terminates when no unvisited neighbors remain — meaning every import chain has been fully explored.
+  </Step>
+</Steps>
+
+## Context Bundling
+
+Once the full set of related files is determined, `run_mock_repopack` reads each file's content and concatenates them into a single string:
+
+```python utils/utils.py
+def run_mock_repopack(paths: List[str], style: str = 'json') -> str:
+    result = []
+    for path in paths:
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                content = f.read()
+            result.append(f"File: {path}\nContent:\n{content}\n")
+    return "\n" + "="*50 + "\n".join(result) + "="*50 + "\n"
+```
+
+This formatted bundle is passed directly as the `context` argument to the LLM in the next stage.
+
+## Comparison: Default vs. Relational
+
+<Tabs>
+  <Tab title="Default (no flag)">
+    Only files explicitly named in the traceback are bundled:
+
+    ```python relational.py
+    # flag == "" (default)
+    return traceback, error_information, run_mock_repopack(collected_traceback_files)
+    ```
+
+    Best for simple, self-contained scripts where the error file is also the source of the bug.
+  </Tab>
+  <Tab title="Relational (-r flag)">
+    All Nth-degree imports are included:
+
+    ```python relational.py
+    # flag == "-r"
+    graph = build_adjacency_list(collected_traceback_files, project_root)
+    all_related_files = get_nth_related_files(collected_traceback_files, graph)
+    return traceback, error_information, run_mock_repopack(list(all_related_files))
+    ```
+
+    Best for multi-module projects where a bug in a helper module causes failures in the entrypoint.
+  </Tab>
+</Tabs>
+
+<Tip>
+Use `-r` whenever the error originates in a file that imports other project files. It costs no extra setup — just add the flag to your `splat squash` command.
+</Tip>
+
+## Gitignore Awareness
+
+Because `build_adjacency_list` only follows imports that resolve to files within the project root (checked via `is_project_file`), and files listed in `.gitignore` are typically not importable Python modules, sensitive files excluded from version control are naturally kept out of the context bundle.

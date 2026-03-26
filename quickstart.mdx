@@ -1,80 +1,141 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Run Splat on your first project in under two minutes.
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide walks you from installation to your first debug session.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- Python 3.8 or later
+- pip
+- npm (for repomix)
+- A [Groq API key](https://console.groq.com)
 
-### Step 2: Deploy your changes
+## Install Splat
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/ehcaw/splat.git
+    cd splat
+    ```
+  </Step>
+  <Step title="Run setup">
+    The setup script creates a virtual environment, installs Python dependencies, and installs repomix via npm.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    bash setup.sh
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    This installs:
+    - All Python dependencies from `requirements.txt`
+    - `repomix` globally via npm
+    - `tmux` via Homebrew (macOS only — on Linux, install tmux manually first)
 
-### Step 3: Go live
+    <Note>
+      The script is written for macOS. If you are on Linux, run `sudo apt install tmux` (or equivalent) before running `setup.sh`.
+    </Note>
+  </Step>
+  <Step title="Activate the virtual environment">
+    ```bash
+    source zapenv/bin/activate
+    ```
+  </Step>
+  <Step title="Set your Groq API key">
+    Create a `.env` file in the project root:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash .env
+    API=your_groq_api_key_here
+    ```
+
+    <Note>
+      Get your API key from the [Groq Console](https://console.groq.com). The key is read from the `API` environment variable.
+    </Note>
+  </Step>
+  <Step title="Install the splat CLI">
+    ```bash
+    pip install -e .
+    ```
+  </Step>
+</Steps>
+
+## Run your first debug session
+
+Use `splat squash` followed by the same command you would normally use to run your program:
+
+```bash
+splat squash "python3 foo.py"
+```
+
+Splat runs your program, captures any error, gathers context from the files in the traceback, and returns a structured fix.
+
+### Example: simple Python error
+
+Suppose you have `foo.py` with a bug:
+
+```python foo.py
+def greet(name):
+    print(f"Hello, {nme}")
+
+greet("world")
+```
+
+Run Splat:
+
+```bash
+splat squash "python3 foo.py"
+```
+
+Splat outputs something like:
+
+```
+🔎 Details about error
+✅ We found the first instance of the error at line 2.
+✅ The owner of the error: foo.py.
+✅ The type of the error: NameError.
+✅ Isolated error message: name 'nme' is not defined. Did you mean 'name'?
+```
+
+You are then prompted interactively:
+
+```
+See suggested change? ... YES / no
+```
+
+Select **Yes** (default) to view the suggested fix:
+
+```python
+print(f"Hello, {name}")
+```
+
+## Use relational analysis for deeper context
+
+When your bug spans multiple files, use the `-r` flag. Splat builds a full import graph from the error trace and includes all related files as context:
+
+```bash
+splat squash -r "python3 main.py"
+```
+
+<Tip>
+  Use `-r` when the error originates in one file but is caused by incorrect values or logic from an imported module. The broader context gives the LLM everything it needs to identify the real root cause.
+</Tip>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed setup options and dependency breakdown
+  </Card>
+  <Card title="squash command" icon="terminal" href="/commands/squash">
+    Full reference for the squash command and all flags
+  </Card>
+  <Card title="How It Works" icon="gear" href="/how-it-works/overview">
+    Understand the pipeline under the hood
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting">
+    Common issues and how to fix them
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

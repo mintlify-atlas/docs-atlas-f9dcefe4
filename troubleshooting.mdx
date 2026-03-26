@@ -1,0 +1,180 @@
+---
+title: "Troubleshooting"
+description: "Diagnose and fix common issues with Splat."
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="API key not found / AuthenticationError">
+    Splat reads the Groq API key from an environment variable named `API`. If this is missing, the Groq client will raise an authentication error.
+
+    **Fix:** Ensure a `.env` file exists in the directory where you run `splat squash`, containing:
+
+    ```bash .env
+    API=your_groq_api_key_here
+    ```
+
+    Confirm `python-dotenv` is installed:
+
+    ```bash
+    pip show python-dotenv
+    ```
+
+    If the variable is set in your shell environment instead, you can verify it with:
+
+    ```bash
+    echo $API
+    ```
+  </Accordion>
+
+  <Accordion title="splat: command not found">
+    The `splat` command is registered via the `setup.py` entry point (`splat=splat:cli`). If it is not found, the package was likely not installed into the active Python environment.
+
+    **Fix:** Activate the virtual environment and install the package in editable mode from the project root:
+
+    ```bash
+    source zapenv/bin/activate
+    pip install -e .
+    ```
+
+    Confirm the command is now available:
+
+    ```bash
+    which splat
+    ```
+
+    <Note>
+      If you skipped the virtual environment, run `pip install -e .` directly. However, using `zapenv` is recommended to keep dependencies isolated.
+    </Note>
+  </Accordion>
+
+  <Accordion title="tmux: command not found">
+    Splat uses tmux to manage terminal sessions. If tmux is not installed, session management will fail.
+
+    **Fix:** Install tmux for your platform:
+
+    <Tabs>
+      <Tab title="macOS">
+        ```bash
+        brew install tmux
+        ```
+      </Tab>
+      <Tab title="Ubuntu / Debian">
+        ```bash
+        sudo apt-get install tmux
+        ```
+      </Tab>
+      <Tab title="Fedora / RHEL">
+        ```bash
+        sudo dnf install tmux
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+
+  <Accordion title="repomix / repopack not found">
+    Splat uses `repomix` (formerly `repopack`) to package file context. If it is not installed globally, the context-gathering step will fail silently or error out.
+
+    **Fix:** Install repomix globally via npm:
+
+    ```bash
+    npm install -g repomix
+    ```
+
+    Confirm it is available:
+
+    ```bash
+    repomix --version
+    ```
+  </Accordion>
+
+  <Accordion title="No output or empty debug response">
+    If Splat runs but returns an empty or incomplete response, the most common cause is that the entrypoint did not produce an error (exit code 0).
+
+    Splat only analyzes processes that exit with a non-zero return code. If the target command runs successfully, no traceback is captured and the pipeline returns empty strings.
+
+    **Fix:** Verify your command actually fails when run directly:
+
+    ```bash
+    python3 your_script.py
+    echo $?   # should be non-zero
+    ```
+
+    If the command exits cleanly, there is no error for Splat to analyze.
+  </Accordion>
+
+  <Accordion title="Submodule or nested entrypoint not working">
+    Splat resolves file paths relative to the current working directory (the project root). Running an entrypoint that lives in a subdirectory may result in incorrect file path resolution and missing context.
+
+    **Fix:** Always run `splat squash` from the root of your project:
+
+    ```bash
+    # From project root
+    splat squash "python3 src/submodule/main.py"
+    ```
+
+    Avoid `cd`-ing into subdirectories before invoking Splat.
+
+    <Note>
+      This is a known limitation. Support for non-root entrypoints is not yet implemented.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Code fix applied but formatting is wrong">
+    When you accept a suggested fix, Splat replaces the errored line with the LLM's suggested code snippet. It preserves the original line's leading whitespace but does not reformat the file.
+
+    This is a known limitation — the `black` formatter integration is present in `agents/file_writer_agent.py` but is currently commented out.
+
+    **Workaround:** After accepting a fix, run your formatter manually:
+
+    ```bash
+    black your_file.py
+    ```
+
+    If `black` is not installed, add it first:
+
+    ```bash
+    pip install black
+    ```
+  </Accordion>
+
+  <Accordion title="JSON decode error in LLM response">
+    Splat instructs the Groq model to return a strict JSON object. Occasionally, the model may return malformed JSON.
+
+    If you see a `json.JSONDecodeError` in the output, try running the command again. The Groq model response is non-deterministic and the issue typically resolves on a subsequent attempt.
+
+    If it persists, check that the error traceback passed to the model is not empty — an empty traceback can confuse the model into returning invalid output.
+  </Accordion>
+
+  <Accordion title="-r flag returns too much or irrelevant context">
+    The `-r` flag traverses all Nth-degree import connections from the files in the error stack. In large projects with deep dependency trees, this can capture a very large number of files.
+
+    If the context window is exceeded or responses are slow, try running without the flag first:
+
+    ```bash
+    # Without relational analysis (faster, less context)
+    splat squash "python3 your_script.py"
+
+    # With relational analysis (more context, better for complex bugs)
+    splat squash -r "python3 your_script.py"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debugging Splat Itself
+
+If Splat fails with an unexpected Python traceback, you can inspect the internal error flow:
+
+1. Check that all dependencies are installed: `pip install -r requirements.txt`
+2. Verify the virtual environment is active: `which python` should point to `zapenv/bin/python`
+3. Confirm the `API` environment variable is set: `python3 -c "import os; from dotenv import load_dotenv; load_dotenv(); print(os.getenv('API'))"`
+
+## Getting Help
+
+If you encounter an issue not covered here, open an issue on the [Splat GitHub repository](https://github.com/ehcaw/splat) with:
+
+- The command you ran
+- The full error output
+- Your Python version (`python3 --version`)
+- Your operating system

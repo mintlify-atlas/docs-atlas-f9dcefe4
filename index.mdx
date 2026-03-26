@@ -1,97 +1,61 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Splat — AI-Powered Debugging"
+description: "Instantly diagnose and fix compile/runtime errors with context-aware AI analysis powered by Groq."
 ---
 
-## Setting up
+Splat is a CLI tool that runs your code, captures errors, gathers full file context, and returns a structured, actionable debug response — all in seconds. Built with Groq's ultra-fast LLM inference, Splat turns cryptic stack traces into clear explanations and suggested fixes.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get Splat installed and debug your first error in under two minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Installation" icon="download" href="/installation">
+    Install Splat globally via pip and set up your API key.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Command Reference" icon="terminal" href="/commands/squash">
+    Full reference for the `splat squash` command and all its flags.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="How It Works" icon="gears" href="/how-it-works/overview">
+    Understand the error parsing, relational analysis, and AI pipeline.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Why Splat?
 
-Everything you need to create world-class documentation.
+Debugging is slow because it's manual — you read the stack trace, open the relevant files, try to understand how they relate, then search for a fix. Splat automates all of that.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Run your code through Splat">
+    Replace `python3 foo.py` with `splat squash "python3 foo.py"`. Splat executes your code in a contained environment and captures the full error output.
+  </Step>
+  <Step title="Splat builds your error context">
+    Splat parses the stack trace to identify every file involved in the error. With the `-r` flag, it recursively follows import relationships to gather Nth-degree related files.
+  </Step>
+  <Step title="Groq's LLM analyzes the error">
+    The error traceback, original error message, and full file context are sent to Groq's `llama3-70b-8192` model. You get back a structured response: where the error is, what it means, and exactly how to fix it.
+  </Step>
+  <Step title="Apply the fix interactively">
+    Splat displays the suggested fix in your terminal and prompts you to apply it directly to your source file — no copy-pasting required.
+  </Step>
+</Steps>
 
-## Need inspiration?
+## Key features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Groq-powered speed" icon="bolt">
+    Uses Groq's hardware-accelerated inference to deliver debug responses nearly instantly, without sacrificing accuracy.
+  </Card>
+  <Card title="Relational context" icon="diagram-project">
+    The `-r` flag traverses your import graph to gather all files related to the error — not just the ones in the stack trace.
+  </Card>
+  <Card title="Git-aware" icon="code-branch">
+    Splat respects your `.gitignore` so sensitive files are never included in the context sent to the LLM.
+  </Card>
+  <Card title="Interactive fixes" icon="wand-magic-sparkles">
+    Review the suggested code change in your terminal and choose whether to apply it to your file with a single keypress.
+  </Card>
+</CardGroup>
+
+<Note>
+  Splat currently has best-in-class support for Python projects. Support for additional languages is in active development.
+</Note>

@@ -1,0 +1,204 @@
+---
+title: Installation
+description: Complete installation guide for Splat, including all dependencies and environment setup.
+---
+
+# Installation
+
+## System requirements
+
+| Requirement | Version |
+|---|---|
+| Python | 3.8 or later |
+| pip | Latest recommended |
+| Node.js + npm | Required for repomix |
+| tmux | Required (macOS: installed via Homebrew) |
+
+## Dependencies
+
+Splat relies on the following key packages:
+
+| Package | Purpose |
+|---|---|
+| `groq` | Groq LLM client for AI inference |
+| `click` | CLI framework |
+| `python-dotenv` | Loading the `API` key from `.env` |
+| `prompt_toolkit` | Interactive terminal output and key bindings |
+| `repopack` | Python file content aggregation |
+| `pydantic` / `pydantic_ai` | Structured data validation |
+| `black` | Code formatting for suggested fixes |
+| `zmq` | ZeroMQ messaging for process communication |
+
+All Python dependencies are listed in `requirements.txt` and installed automatically by `pip install -r requirements.txt`.
+
+`repomix` is also installed globally via npm by the setup script. It is an optional tool for broader repository context gathering.
+
+## Step-by-step installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/ehcaw/splat.git
+    cd splat
+    ```
+  </Step>
+
+  <Step title="Run the setup script">
+    The `setup.sh` script handles environment creation and dependency installation:
+
+    ```bash
+    bash setup.sh
+    ```
+
+    The script runs the following steps:
+
+    ```bash setup.sh
+    # Installs tmux (macOS via Homebrew)
+    brew install tmux
+
+    # Creates a Python virtual environment named zapenv
+    python3 -m venv zapenv
+
+    # Installs all Python dependencies
+    pip install -r requirements.txt
+
+    # Installs repomix globally via npm
+    npm install -g repomix
+    ```
+
+    <Warning>
+      The setup script uses Homebrew (`brew`) for tmux installation and is written for macOS. On Linux, install tmux with your system package manager (`sudo apt install tmux` or `sudo dnf install tmux`) before running the script.
+    </Warning>
+
+    <Note>
+      After `setup.sh` completes, you must manually activate the virtual environment before installing Splat: `source zapenv/bin/activate`. The setup script creates the environment but does not activate it.
+    </Note>
+  </Step>
+
+  <Step title="Activate the virtual environment">
+    ```bash
+    source zapenv/bin/activate
+    ```
+
+    You must activate the virtual environment each time you start a new terminal session before using Splat.
+  </Step>
+
+  <Step title="Configure your Groq API key">
+    Splat reads your Groq API key from the `API` environment variable. Create a `.env` file in the project root:
+
+    ```bash .env
+    API=your_groq_api_key_here
+    ```
+
+    To get an API key, sign up at the [Groq Console](https://console.groq.com).
+
+    <Warning>
+      Do not commit your `.env` file to version control. Splat respects `.gitignore`, but your API key should never be included in the context sent to the LLM.
+    </Warning>
+  </Step>
+
+  <Step title="Install the splat package">
+    Install Splat as a local editable package to make the `splat` command available globally in the active environment:
+
+    ```bash
+    pip install -e .
+    ```
+
+    This registers the `splat` entry point defined in `setup.py`.
+  </Step>
+
+  <Step title="Verify the installation">
+    Confirm Splat is installed and accessible:
+
+    ```bash
+    splat --help
+    ```
+
+    You should see the available commands listed in the output.
+  </Step>
+</Steps>
+
+## Manual dependency installation
+
+If you prefer not to use the setup script, install dependencies manually:
+
+```bash
+# Create and activate virtual environment
+python3 -m venv zapenv
+source zapenv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Install repomix
+npm install -g repomix
+
+# Install splat CLI
+pip install -e .
+```
+
+## Environment variables
+
+<ParamField path="API" type="string" required>
+  Your Groq API key. Splat uses this to authenticate requests to the Groq API for LLM inference. Set this in a `.env` file at the project root or export it in your shell environment.
+</ParamField>
+
+## Verifying your setup
+
+Run Splat against a simple Python file with a known error to confirm everything is working:
+
+```bash
+# Create a test file with a bug
+echo "print(undefined_variable)" > test_splat.py
+
+# Run Splat
+splat squash "python3 test_splat.py"
+```
+
+If Splat returns structured error details and a suggested fix, your installation is complete.
+
+## Troubleshooting installation
+
+<AccordionGroup>
+  <Accordion title="'splat' command not found after installation">
+    Make sure the virtual environment is activated:
+
+    ```bash
+    source zapenv/bin/activate
+    ```
+
+    Then re-run `pip install -e .` from the project root.
+  </Accordion>
+
+  <Accordion title="Groq API errors or authentication failures">
+    Verify your `.env` file is in the project root directory and contains `API=your_key`. The variable name must be exactly `API`, not `GROQ_API_KEY` or similar.
+  </Accordion>
+
+  <Accordion title="repomix not found">
+    Ensure Node.js and npm are installed, then run:
+
+    ```bash
+    npm install -g repomix
+    ```
+
+    If you see a permissions error, prefix with `sudo` or configure npm to use a user-local directory.
+  </Accordion>
+
+  <Accordion title="tmux not found on Linux">
+    Install tmux using your distribution's package manager:
+
+    <CodeGroup>
+    ```bash Ubuntu/Debian
+    sudo apt install tmux
+    ```
+
+    ```bash Fedora/RHEL
+    sudo dnf install tmux
+    ```
+
+    ```bash Arch Linux
+    sudo pacman -S tmux
+    ```
+    </CodeGroup>
+  </Accordion>
+</AccordionGroup>

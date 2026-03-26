@@ -1,0 +1,100 @@
+---
+title: "Flags"
+description: "Command-line flags available with splat squash and their effects on context gathering."
+---
+
+## Flag Reference
+
+Splat's flags control how much file context is gathered before sending data to the AI. More context generally yields more accurate fix suggestions at the cost of slightly higher latency.
+
+## `-r` — Relational Context
+
+```bash
+splat squash -r <entrypoint>
+```
+
+Enables **relational file analysis**. When `-r` is set, Splat does not stop at the files mentioned in the error traceback. Instead, it traverses the import graph of each error-stack file to any Nth degree and includes all connected source files as context.
+
+### How it works
+
+<Steps>
+  <Step title="Parse the error stack">
+    Splat extracts every file path referenced in the traceback using a regex pattern that recognizes both `File "path"` Python-style traces and bare `.py` filename references.
+  </Step>
+
+  <Step title="Build an adjacency list">
+    For each file found in the error stack, Splat parses its Python AST to discover `import` and `from ... import` statements. Each imported module that resolves to a file in your project is added as an edge in a dependency graph.
+
+    ```python
+    # relational.py
+    graph = build_adjacency_list(collected_traceback_files, project_root)
+    ```
+  </Step>
+
+  <Step title="Traverse to Nth degree">
+    A breadth-first traversal follows every edge in the graph until all reachable project files have been visited.
+
+    ```python
+    all_related_files = get_nth_related_files(collected_traceback_files, graph)
+    ```
+  </Step>
+
+  <Step title="Bundle and send context">
+    The full contents of every discovered file are concatenated and sent to the Groq LLM alongside the traceback. The AI has complete visibility into every file your erroring code depends on.
+  </Step>
+</Steps>
+
+### When to use `-r`
+
+<Tabs>
+  <Tab title="Use -r when...">
+    - The error originates in a helper module, not the entrypoint
+    - Your traceback references multiple files
+    - The bug is likely caused by an incorrect value passed between modules
+    - You want the most accurate fix suggestion possible
+
+    ```bash
+    splat squash -r "python3 main.py"
+    ```
+  </Tab>
+  <Tab title="Skip -r when...">
+    - The error is clearly self-contained (e.g., a `SyntaxError` in a single file)
+    - Your project has a very large import graph and you want a faster response
+    - You are debugging a standalone script with no imports
+
+    ```bash
+    splat squash "python3 script.py"
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Start without `-r` for a quick first pass. If the suggestion doesn't address the root cause, rerun with `-r` to give the AI full relational context.
+</Tip>
+
+## Default Behavior (No Flag)
+
+When no flag is provided, Splat limits context to only the files directly mentioned in the error traceback. This is faster and usually sufficient for simple, localized errors.
+
+```bash
+# Only files in the traceback are included as context
+splat squash "python3 foo.py"
+
+# All Nth-degree imports of traceback files are included
+splat squash -r "python3 foo.py"
+```
+
+## Git-Aware Context Gathering
+
+Regardless of which flag you use, Splat respects your `.gitignore` file. Files and directories excluded from version control — such as virtual environments, secrets, or build artifacts — are never included in the context sent to the AI.
+
+<Note>
+  This means your `.env` files, credentials, and any other gitignored paths are automatically excluded from AI analysis.
+</Note>
+
+## Flag Summary
+
+| Flag | Context Gathered | Best For |
+|------|-----------------|----------|
+| _(none)_ | Files referenced in the error traceback only | Fast debugging of localized errors |
+| `-r` | Traceback files + all Nth-degree imported project files | Complex bugs spanning multiple modules |

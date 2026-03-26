@@ -1,0 +1,87 @@
+---
+title: "Error Parsing"
+description: "How Splat extracts actionable file paths from a raw Python traceback."
+---
+
+The first thing Splat does after a process fails is turn the raw stderr output into a concrete list of files. This list drives everything that follows — the context gathering and the LLM prompt.
+
+## Running the Entrypoint
+
+Splat executes your command via `relational_error_parsing_function`, which calls `subprocess.run` with `capture_output=True` and `check=True`. When the process exits with a non-zero code, the `CalledProcessError` is caught and the error information is extracted:
+
+```python relational.py
+def relational_error_parsing_function(entrypoint, flag: str = "") -> Tuple[str, str, str]:
+    try:
+        subprocess.run(entrypoint, capture_output=True, check=True, text=True)
+        return "", "", ""  # no error
+    except subprocess.CalledProcessError as error:
+        traceback: str = error.stderr if error.stderr else str(error)
+        error_information: str = str(error)
+        collected_traceback_files = parse_error_stack(traceback)
+        ...
+```
+
+Two values are captured separately:
+- **`traceback`** — the full `stderr` string, which contains the formatted traceback with file references.
+- **`error_information`** — the string representation of the `CalledProcessError`, which includes the return code and command.
+
+## Parsing the Traceback
+
+`parse_error_stack` processes the traceback line by line using a regular expression designed to match both standard Python traceback `File "..."` references and bare `.py` filenames:
+
+```python utils/utils.py
+def parse_error_stack(error_info: str) -> List[str]:
+    files = []
+    file_pattern = re.compile(r'(?:File "([^"]+)"|\b(\S+\.py)\b)')
+
+    for line in error_info.split('\n'):
+        matches = file_pattern.findall(line)
+        for match in matches:
+            file_path = next((m for m in match if m), None)
+            if file_path:
+                file_path = file_path.strip().strip("'\"")
+                if os.path.exists(file_path):
+                    files.append(file_path)
+
+    return list(dict.fromkeys(files))  # deduplicated, order preserved
+```
+
+### What the regex matches
+
+The pattern `(?:File "([^"]+)"|\b(\S+\.py)\b)` has two alternatives:
+
+| Pattern | Matches |
+|---|---|
+| `File "([^"]+)"` | Standard CPython traceback lines: `File "/path/to/foo.py", line 14, in <module>` |
+| `\b(\S+\.py)\b` | Bare Python filenames appearing anywhere in the output |
+
+### Filters applied
+
+- Quotes are stripped from matched paths.
+- `os.path.exists(file_path)` is checked — fabricated or system paths that don't exist on disk are silently dropped.
+- `dict.fromkeys` preserves insertion order while deduplicating, so the file that failed first appears first.
+
+## Example
+
+Given this traceback:
+
+```
+Traceback (most recent call last):
+  File "/home/user/myproject/main.py", line 8, in <module>
+    result = compute(value)
+  File "/home/user/myproject/utils.py", line 3, in compute
+    return x + "suffix"
+TypeError: can only concatenate str (not "int") to str
+```
+
+`parse_error_stack` returns:
+
+```python
+["/home/user/myproject/main.py", "/home/user/myproject/utils.py"]
+```
+
+These paths are then handed off to the context gathering stage. Without the `-r` flag, only these files are included. With `-r`, they seed the relational graph traversal.
+
+<Info>
+Splat only operates on files at or below the project root. Paths outside the project directory (e.g. standard library files) are naturally excluded because they rarely exist at the discovered paths on the current machine.
+</Info>

@@ -1,0 +1,127 @@
+---
+title: "splat squash"
+description: "Run your program through Splat's AI-powered debug pipeline to instantly identify and fix errors."
+---
+
+## Overview
+
+`splat squash` is the primary command for invoking Splat's debug pipeline. It executes your program in a contained environment, captures any compile or runtime errors, analyzes the relevant source files, and delivers an AI-generated structured fix suggestion — all in seconds.
+
+```bash
+splat squash [OPTIONS] <entrypoint>
+```
+
+<ParamField path="entrypoint" type="string" required>
+  The shell command used to run your program — exactly as you would run it yourself. This is always a quoted string.
+
+  Examples: `"python3 main.py"`, `"node index.js"`, `"go run main.go"`
+</ParamField>
+
+## Basic Usage
+
+Pass your run command as the entrypoint argument:
+
+```bash
+splat squash "python3 main.py"
+```
+
+Splat will:
+1. Execute the command in a subprocess
+2. Capture the full error traceback from stderr
+3. Parse the traceback to identify which source files are involved
+4. Bundle those file contents as context
+5. Send everything to the Groq LLM for analysis
+6. Print a structured debug report to your terminal
+
+## Output Format
+
+Splat's AI returns a structured JSON object and renders it in your terminal with highlighted sections:
+
+```json
+{
+  "where": {
+    "repository_path": "/Users/you/myproject",
+    "file_name": "main.py",
+    "line_number": "42"
+  },
+  "what": {
+    "error_type": "NameError",
+    "description": "Variable 'result' is referenced before assignment in the compute() function."
+  },
+  "how": {
+    "error_origination": "42",
+    "suggested_code_solution": "result = compute_value(input_data)"
+  }
+}
+```
+
+The terminal output walks you through each field interactively:
+
+- **Where** — the file and exact line number where the error occurred
+- **What** — the error type and a concise plain-language explanation
+- **How** — the originating line number and a ready-to-apply code fix
+
+## Interactive Fix Prompt
+
+After displaying the error details, Splat prompts you to review and optionally apply the suggested fix:
+
+```
+See suggested change? ... Yes / No
+```
+
+Use the **left/right arrow keys** to toggle between `Yes` and `No`, then press **Enter** to confirm.
+
+- Selecting **Yes** displays the `how` block with the suggested code change.
+- Selecting **No** exits without modifying any files.
+
+<Note>
+  When you apply a fix, Splat writes the suggested code directly to the line where the error originated. Make sure your files are version-controlled before applying automated changes.
+</Note>
+
+## Examples
+
+<Steps>
+  <Step title="Debug a Python script">
+    ```bash
+    splat squash "python3 app.py"
+    ```
+    Splat runs `app.py`, captures any traceback, and returns a structured fix.
+  </Step>
+
+  <Step title="Debug a Node.js app">
+    ```bash
+    splat squash "node server.js"
+    ```
+    Works with any command that produces stderr output on failure.
+  </Step>
+
+  <Step title="Debug with relational context">
+    ```bash
+    splat squash -r "python3 main.py"
+    ```
+    Add the `-r` flag to include all imported files connected to error stack files. See [Flags](/commands/flags) for details.
+  </Step>
+</Steps>
+
+## Supported Runtimes
+
+Splat's AI analysis pipeline and relational file traversal are designed for **Python projects**. The `entrypoint` argument can be any shell command, but error parsing, import graph analysis, and fix suggestions are optimized for Python tracebacks and Python source files.
+
+```bash
+# Primary use case
+splat squash "python3 main.py"
+splat squash -r "python3 app.py"
+```
+
+<Note>
+  Relational context gathering (`-r`) uses Python AST parsing to resolve import relationships. Projects written in other languages will not benefit from import graph traversal.
+</Note>
+
+## Known Limitations
+
+<Warning>
+  Splat does not currently support sub-module entrypoints that do not originate from the project root directory. Always run `splat squash` from your project root.
+</Warning>
+
+- Applied code fixes do not conform to your formatter configuration (e.g., Black, Prettier). Run your formatter after applying a fix.
+- Only the most critical error is analyzed when multiple errors are present in the traceback.

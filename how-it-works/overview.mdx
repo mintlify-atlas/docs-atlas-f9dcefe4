@@ -1,0 +1,78 @@
+---
+title: "How Splat Works"
+description: "An end-to-end look at Splat's debugging pipeline — from error capture to applied fix."
+---
+
+When you run `splat squash`, a four-stage pipeline executes in sequence: it runs your program in a contained subprocess, captures the failure, gathers file context, and sends everything to a fast LLM for a structured fix. Each stage is described in detail in its own page; this page gives you the full picture.
+
+<Steps>
+  <Step title="Run the entrypoint">
+    Splat executes your command (e.g. `python3 main.py`) as a subprocess using `subprocess.run` with `capture_output=True`. If the process exits cleanly, nothing happens. If it fails, the full stderr traceback and error string are captured and passed to the next stage.
+  </Step>
+  <Step title="Parse the error stack">
+    The raw traceback is scanned with a regular expression that finds every `File "..."` reference and bare `.py` filename. Only paths that exist on disk are kept. The result is an ordered, deduplicated list of files directly involved in the crash.
+
+    See [Error Parsing](/how-it-works/error-parsing) for full details.
+  </Step>
+  <Step title="Gather file context">
+    Splat reads the content of every file from step 2 and bundles it into a single context string. When the `-r` flag is used, Splat first builds a dependency graph across the project and expands the file set to every file reachable from the error files — to any degree of import depth.
+
+    See [Relational Analysis](/how-it-works/relational-analysis) for full details.
+  </Step>
+  <Step title="Generate and apply the fix">
+    The traceback, the original error message, and the file context are sent to Groq's `llama3-70b-8192` model with a strict JSON-only prompt. The model returns a structured object with the exact file, line number, error type, description, and a ready-to-use code fix. Splat then displays this in the terminal and offers to apply the change directly to your file.
+
+    See [AI Debugging](/how-it-works/ai-debugging) for full details.
+  </Step>
+</Steps>
+
+## Pipeline at a Glance
+
+```python module.py
+# Simplified view of the full pipeline (see module.py)
+from relational import relational_error_parsing_function
+from process.process import process
+
+entrypoint = ['python3', 'main.py']  # list passed to subprocess.run
+flag = '-r'
+
+# Stage 1 + 2 + 3: run, parse, gather context
+traceback, error_info, context = relational_error_parsing_function(entrypoint, flag)
+
+# Stage 4: LLM analysis
+response = process(traceback, error_info, context)
+```
+
+## The Debug Response Format
+
+Every successful run produces a JSON object with three top-level keys:
+
+```json
+{
+  "where": {
+    "repository_path": "/Users/you/myproject",
+    "file_name": "main.py",
+    "line_number": "14"
+  },
+  "what": {
+    "error_type": "TypeError",
+    "description": "unsupported operand type(s) for +: 'int' and 'str'"
+  },
+  "how": {
+    "error_origination": "14",
+    "suggested_code_solution": "result = count + int(value)"
+  }
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="Error Parsing" icon="magnifying-glass" href="/how-it-works/error-parsing">
+    How Splat extracts file paths from a raw Python traceback.
+  </Card>
+  <Card title="Relational Analysis" icon="diagram-project" href="/how-it-works/relational-analysis">
+    How the -r flag builds a dependency graph for richer context.
+  </Card>
+  <Card title="AI Debugging" icon="robot" href="/how-it-works/ai-debugging">
+    How Groq LLM turns file context into a structured fix.
+  </Card>
+</CardGroup>

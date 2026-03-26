@@ -1,0 +1,97 @@
+---
+title: Introduction
+description: Splat is an AI-powered CLI debugging tool that captures compile and runtime errors, analyzes contextual file relationships, and delivers instant, structured fix suggestions.
+---
+
+# Introduction
+
+Splat is a command-line tool that takes the pain out of debugging. Point it at any program entrypoint, and Splat runs your code, captures the error, gathers relevant file context, and returns a structured fix — powered by Groq's fast LLM inference.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Splat running on your first project in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed setup instructions and prerequisites
+  </Card>
+  <Card title="How It Works" icon="gear" href="/how-it-works/overview">
+    Understand Splat's error parsing and analysis pipeline
+  </Card>
+  <Card title="Command Reference" icon="terminal" href="/commands/squash">
+    Full documentation for every command and flag
+  </Card>
+</CardGroup>
+
+## Why Splat?
+
+When a bug hits, you want a fix — not a long debugging session. Splat automates the grunt work: running your code, reading the stack trace, tracing file relationships, and generating a targeted code fix with the exact line to change.
+
+<CardGroup cols={2}>
+  <Card title="Instant AI inference" icon="bolt">
+    Powered by Groq's LLM inference for near-instant debug responses using `llama3-70b-8192`.
+  </Card>
+  <Card title="Git-aware context" icon="code-branch">
+    Respects your `.gitignore` so no sensitive files are included in the analysis context.
+  </Card>
+  <Card title="Relational file analysis" icon="diagram-project">
+    Use the `-r` flag to traverse import graphs to the Nth degree, pulling in every related file.
+  </Card>
+  <Card title="Structured output" icon="brackets-curly">
+    Returns a JSON object with the exact error location, error type, description, and a ready-to-apply code fix.
+  </Card>
+</CardGroup>
+
+## How Splat works
+
+Splat operates as a pipeline:
+
+<Steps>
+  <Step title="Run your entrypoint">
+    Splat executes the command you provide (e.g., `python3 main.py`) in a contained subprocess and captures both stdout and stderr.
+  </Step>
+  <Step title="Parse the error stack">
+    The error traceback is parsed to extract every file path mentioned in the stack trace.
+  </Step>
+  <Step title="Build file context">
+    Without `-r`: only files from the error trace are included.  
+    With `-r`: an import adjacency graph is built and all Nth-degree related files are included.
+  </Step>
+  <Step title="Send to Groq LLM">
+    The traceback, raw error, and full file context are sent to the Groq API for analysis.
+  </Step>
+  <Step title="Display structured fix">
+    Splat prints the error location, type, description, and suggested code fix in your terminal. You can choose to view and apply the fix interactively.
+  </Step>
+</Steps>
+
+## Output format
+
+Splat always returns a structured JSON response:
+
+```json
+{
+  "where": {
+    "repository_path": "/path/to/your/project",
+    "file_name": "main.py",
+    "line_number": "42"
+  },
+  "what": {
+    "error_type": "NameError",
+    "description": "Variable 'config' is used before it is defined."
+  },
+  "how": {
+    "error_origination": "42",
+    "suggested_code_solution": "config = load_config()"
+  }
+}
+```
+
+## Known limitations
+
+<Warning>
+  Splat does not conform to any existing code formatting configurations when inserting suggested fixes. Review the suggestion before applying it.
+</Warning>
+
+<Note>
+  Splat works best when the entrypoint is run from the project's root directory. Sub-module entrypoints that do not originate in the root directory may not resolve correctly.
+</Note>

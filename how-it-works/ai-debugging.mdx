@@ -1,0 +1,153 @@
+---
+title: "AI Debugging"
+description: "How Splat uses Groq's LLM to turn file context and a traceback into a structured, actionable fix."
+---
+
+Once the error traceback and file context have been gathered, Splat sends everything to a Groq-hosted LLM and receives a structured JSON response that pinpoints the error and provides a ready-to-apply code fix.
+
+## The LLM Call
+
+The `process` function constructs a multi-turn prompt and calls Groq's `llama3-70b-8192` model with `response_format: json_object` to guarantee valid JSON output:
+
+```python process/process.py
+def process(traceback_message: str, original_error_information: str, context: str) -> object:
+    client = Groq(api_key=os.getenv("API"))
+
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "You are an expert software debugging assistant ..."
+            },
+            {
+                "role": "system",
+                "content": "Your response MUST be a valid JSON object with this exact structure: ..."
+            },
+            {
+                "role": "user",
+                "content": f"Context: {context}\n\nTraceback message: {traceback_message}\n\nOriginal error message: {original_error_information}"
+            }
+        ],
+        model="llama3-70b-8192",
+        response_format={"type": "json_object"}
+    )
+    return chat_completion.choices[0].message.content
+```
+
+## The Prompt Strategy
+
+Splat uses a layered system prompt to constrain the model's behavior. Four system messages are sent in sequence:
+
+<AccordionGroup>
+  <Accordion title="Role declaration">
+    The first system message establishes the model's role as an expert software debugging assistant specializing in Python error analysis.
+  </Accordion>
+  <Accordion title="Step-by-step instructions">
+    The second system message tells the model to analyze the traceback, locate the source, explain the error in natural language, and provide actionable suggestions — in that order.
+  </Accordion>
+  <Accordion title="Strict JSON schema">
+    The third system message specifies the exact output schema and makes clear that no other text should be returned. This ensures the response is always machine-parseable.
+  </Accordion>
+  <Accordion title="Constraints">
+    The fourth system message prevents the model from using placeholders, from addressing multiple errors at once (it must focus on the most critical), and from adding explanatory text to the code snippet.
+  </Accordion>
+</AccordionGroup>
+
+## The Response Schema
+
+Every successful call returns a JSON object conforming to this schema:
+
+<ResponseField name="where" type="object">
+  Location of the error in the repository.
+  <Expandable title="properties">
+    <ResponseField name="repository_path" type="string">
+      Absolute path to the repository root.
+    </ResponseField>
+    <ResponseField name="file_name" type="string">
+      Name of the file where the error was found.
+    </ResponseField>
+    <ResponseField name="line_number" type="string">
+      Line number where the error occurred.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="what" type="object">
+  Classification and description of the error.
+  <Expandable title="properties">
+    <ResponseField name="error_type" type="string">
+      The specific Python error type (e.g. `TypeError`, `AttributeError`, `SyntaxError`).
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Concise natural-language explanation of what went wrong.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="how" type="object">
+  The fix.
+  <Expandable title="properties">
+    <ResponseField name="error_origination" type="string">
+      Line number where the error originated (may differ from where it surfaced).
+    </ResponseField>
+    <ResponseField name="suggested_code_solution" type="string">
+      A valid Python code snippet that replaces the offending line. No commentary — just code.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Terminal Output
+
+`terminalstep1` receives the raw JSON string and renders it in the terminal using `prompt_toolkit`:
+
+```python terminalout/terminal.py
+def terminalstep1(json_object):
+    data = json.loads(json_object)
+    # Print location and error classification
+    print_formatted_text(HTML(f"✅ We found the first instance of the <red><b>error</b></red> at <b><magenta>line {data['where']['line_number']}</magenta></b>."))
+    print_formatted_text(HTML(f"✅ The owner of the <b><red>error</red></b>: <b><magenta>{data['where']['file_name']}</magenta></b>."))
+    print_formatted_text(HTML(f"✅ The type of the <b><red>error</red></b>: <b><magenta>{data['what']['error_type']}</magenta></b>."))
+    print_formatted_text(HTML(f"✅ Isolated <red><b>error</b></red> message: <b><cyan>{data['what']['description']}</cyan></b>"))
+    # Interactive prompt — left arrow = Yes, right arrow = No, Enter = confirm
+    ...
+    if options[current_index] == 'y':
+        print_formatted_text(HTML("<b><ansigreen>How to fix error:</ansigreen></b>"), data['how'])
+        return True, data   # caller can pass data to file_writer_agent
+    else:
+        print_formatted_text(HTML("<b><ansigreen>No changes will be applied.</ansigreen></b>"))
+        return False, None
+```
+
+The function returns a tuple `(bool, data | None)`. When the user selects **Yes**, it prints the `how` fix details and returns `(True, data)` so the caller can send it to the file writer agent for in-place application.
+
+## Applying the Fix
+
+When the user confirms, the file writer agent replaces the offending line in-place:
+
+```python agents/file_writer_agent.py
+# Inside apply_error_correction handler
+file_path = os.path.join(response['where']['repository_path'], response['where']['file_name'])
+line_number = int(response['where']['line_number'])
+suggested_code = response['how']['suggested_code_solution']
+
+with open(file_path, 'r', encoding='utf-8') as file:
+    lines = file.readlines()
+
+# Preserve existing indentation
+stripped_line = lines[line_number - 1].strip()
+num_whitespace = len(lines[line_number - 1]) - len(stripped_line)
+lines[line_number - 1] = " " * num_whitespace + suggested_code
+
+with open(file_path, 'w', encoding='utf-8') as file:
+    file.writelines(lines)
+```
+
+The agent preserves the original indentation level of the replaced line by measuring the leading whitespace before overwriting it.
+
+<Warning>
+Splat applies exactly one line replacement. If the fix requires changes across multiple lines or files, you will need to apply those manually after reviewing the suggestion.
+</Warning>
+
+## Why Groq
+
+Splat uses [Groq](https://groq.com/) specifically for its inference speed. The `llama3-70b-8192` model running on Groq's LPU hardware returns responses in milliseconds, making the debugging loop feel near-instant even for large context bundles.

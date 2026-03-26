@@ -1,0 +1,91 @@
+---
+title: "Configuration"
+description: "Configure Splat with your Groq API key and understand project requirements."
+---
+
+## Prerequisites
+
+Splat has a small set of system requirements before it can run:
+
+- **Python 3.8+**
+- **tmux** — used to manage terminal sessions for the interactive CLI
+- **Node.js** — required for `repomix`, the npm-based context packager
+- **Git** — used to detect `.gitignore` rules and exclude sensitive files
+
+<Note>
+  The included `setup.sh` installs tmux via Homebrew and is intended for macOS. On Linux, install tmux with your system package manager (e.g., `sudo apt-get install tmux`).
+</Note>
+
+## Groq API Key
+
+Splat uses [Groq](https://groq.com/) to power its AI debugging engine. You need a Groq API key to use Splat.
+
+<Steps>
+  <Step title="Get a Groq API key">
+    Sign up at [console.groq.com](https://console.groq.com) and generate an API key from your dashboard.
+  </Step>
+  <Step title="Create a .env file">
+    In the root of your project (or your home directory), create a `.env` file and add your key:
+
+    ```bash .env
+    API=your_groq_api_key_here
+    ```
+
+    <Warning>
+      The environment variable must be named `API`. Splat reads this exact variable name via `os.getenv("API")`.
+    </Warning>
+  </Step>
+  <Step title="Verify the key is loaded">
+    Splat uses `python-dotenv` to automatically load `.env` from the working directory when it starts. No additional setup is required — just ensure the `.env` file is present before running `splat squash`.
+  </Step>
+</Steps>
+
+## .gitignore Awareness
+
+Splat automatically reads your project's `.gitignore` file and excludes matching files from the context it sends to the LLM. This means:
+
+- Secrets, credentials, and local config files listed in `.gitignore` are never sent to Groq
+- `node_modules`, build artifacts, and other ignored directories are skipped
+- The `.env` file itself is excluded by default if it appears in `.gitignore`
+
+<Tip>
+  Add your `.env` file to `.gitignore` to ensure API keys are never accidentally included in context:
+
+  ```bash .gitignore
+  .env
+  ```
+</Tip>
+
+## LLM Model
+
+Splat uses the `llama3-70b-8192` model via Groq by default. This model is selected for speed and accuracy on code debugging tasks. You do not need to configure the model — it is hardcoded in the current release.
+
+## Virtual Environment
+
+The included `setup.sh` creates a dedicated Python virtual environment named `zapenv` and installs dependencies from `requirements.txt`. To activate the environment before running Splat:
+
+```bash
+source zapenv/bin/activate
+```
+
+After activating, install the Splat CLI entry point:
+
+```bash
+pip install -e .
+```
+
+This registers the `splat` command on your PATH using the `setup.py` entry point definition.
+
+<Note>
+  `setup.sh` installs `requirements.txt` before the virtual environment is activated, so you may need to run `pip install -r requirements.txt` manually inside the activated environment if dependencies are not found.
+</Note>
+
+## Known Limitations
+
+<Warning>
+  Splat currently does not support entrypoints that originate outside the project's root directory. Always run `splat squash` from your project root. Running from a subdirectory may produce incomplete file path resolution and missing context.
+</Warning>
+
+- **Code fix formatting** — when you accept a suggested fix, Splat replaces the errored line verbatim. It preserves leading whitespace from the original line but does not reformat the file. The `black` formatter integration exists in the codebase but is currently commented out. Run your formatter manually after applying a fix.
+- **Single-error focus** — when multiple errors are present, the LLM is instructed to focus on the single most critical error that likely caused the others.
+- **Python-first** — while framework detection for many languages is present in the codebase, active error parsing and context gathering are optimized for Python projects.
